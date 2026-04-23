@@ -44,26 +44,33 @@ HW01/
 ### הבעיה: סיווג רב-מחלקתי
 
 נתון מדגם אימון
+
 $$
-\mathcal{D} = \{(\mathbf{x}_i, y_i)\}_{i=1}^{N}, \quad \mathbf{x}_i \in \mathbb{R}^{D},\; y_i \in \{0, 1, \ldots, C-1\}.
+\mathcal{D} = \\{(\mathbf{x}_i, y_i)\\}_{i=1}^{N}, \quad \mathbf{x}_i \in \mathbb{R}^{D},\\; y_i \in \\{0, 1, \ldots, C-1\\}.
 $$
+
 אצלנו, כל תמונה הופכת לוקטור באורך $D = 32 \cdot 32 \cdot 3 + 1 = 3073$ (המימד האחרון הוא קבוע 1 – ה־**bias trick**, ראו בהמשך), ו־$C = 3$ (תת־קבוצה של שלוש מחלקות ב־CIFAR-10).
 
-המטרה היא ללמוד פונקציה $h: \mathbb{R}^{D}\to\{0,\ldots,C-1\}$ שמסווגת היטב דגימות חדשות.
+המטרה היא ללמוד פונקציה $h: \mathbb{R}^{D}\to\\{0,\ldots,C-1\\}$ שמסווגת היטב דגימות חדשות.
 
 ### מודל לינארי גנרי
 
 לכל מחלקה $c$ יש וקטור משקלות $\mathbf{w}_c \in \mathbb{R}^{D}$. נאחד אותם למטריצה
+
 $$
-W \in \mathbb{R}^{D \times C}, \qquad W = [\mathbf{w}_0 \,|\, \mathbf{w}_1 \,|\, \cdots \,|\, \mathbf{w}_{C-1}].
+W \in \mathbb{R}^{D \times C}, \qquad W = [\mathbf{w}_0 \\,|\\, \mathbf{w}_1 \\,|\\, \cdots \\,|\\, \mathbf{w}_{C-1}].
 $$
+
 עבור דגימה $\mathbf{x}$, הציונים (scores) מוגדרים כ־
+
 $$
 \mathbf{s}(\mathbf{x}) = \mathbf{x}^\top W \in \mathbb{R}^{C}, \qquad s_c(\mathbf{x}) = \mathbf{x}^\top \mathbf{w}_c.
 $$
+
 כלל החיזוי (עבור שני המודלים שלנו) הוא:
+
 $$
-\hat{y}(\mathbf{x}) = \arg\max_{c \in \{0,\ldots,C-1\}} s_c(\mathbf{x}).
+\hat{y}(\mathbf{x}) = \arg\max_{c \in \\{0,\ldots,C-1\\}} s_c(\mathbf{x}).
 $$
 
 **Bias trick.** במקום לשמור וקטור הטיה $\mathbf{b}$ נפרד, אנחנו מוסיפים לכל דגימה עמודה קבועה של 1, כך ש־$D' = D+1$. העמודה האחרונה של $W$ ממלאת את תפקיד ה־bias. זה מפשט את המימוש לכפל מטריצות יחיד.
@@ -71,16 +78,20 @@ $$
 ### פרספטרון רב-מחלקתי
 
 **Loss (0/1 mistakes).** במימוש שלנו, ההפסד שמחזיר `perceptron_loss_naive` הוא שיעור הטעויות בבאץ':
+
 $$
-L_{\text{perc}}(W) = \frac{1}{N} \sum_{i=1}^{N} \mathbb{1}\!\left[\hat{y}_i \neq y_i\right],
+L_{\text{perc}}(W) = \frac{1}{N} \sum_{i=1}^{N} \mathbb{1}\\!\left[\hat{y}_i \neq y_i\right],
 $$
+
 כאשר $\hat{y}_i = \arg\max_c \mathbf{x}_i^\top \mathbf{w}_c$.
 
 **Update rule.** הגרדיאנט שנבנה בקוד ממש את כלל העדכון הקלאסי של פרספטרון רב-מחלקתי: עבור דגימה שסווגה שגוי ($\hat{y}_i \neq y_i$) נגדיר
+
 $$
 \frac{\partial L_i}{\partial \mathbf{w}_{y_i}} = -\mathbf{x}_i, \qquad
 \frac{\partial L_i}{\partial \mathbf{w}_{\hat{y}_i}} = +\mathbf{x}_i,
 $$
+
 ועבור דגימה שסווגה נכון הגרדיאנט הוא אפס. לאחר צעד SGD סטנדרטי $W \leftarrow W - \eta \nabla_W L$, זה בדיוק מוסיף $\eta \mathbf{x}_i$ לעמודת המחלקה הנכונה ומוריד $\eta \mathbf{x}_i$ מעמודת המחלקה השגויה – כלומר **מגביר את הציון של המחלקה הנכונה ומחליש את הציון של השגויה**.
 
 > הערה חשובה: $L_{\text{perc}}$ אינו גזיר חלק – אנחנו משתמשים ב־**sub-gradient**. זו הסיבה שהגרדיאנט לא עשיר במידע: הוא או אפס (סיווג נכון) או $\pm \mathbf{x}_i$.
@@ -90,29 +101,37 @@ $$
 כאן עוברים ממודל "מבוסס טעויות" למודל הסתברותי.
 
 **Softmax.** נגדיר התפלגות הסתברות מעל המחלקות:
+
 $$
 p(y=c \mid \mathbf{x}; W) = \frac{\exp(s_c(\mathbf{x}))}{\sum_{k=0}^{C-1} \exp(s_k(\mathbf{x}))}, \qquad c=0,\ldots,C-1.
 $$
 
 **Numerical stability.** מימושית, $\exp$ על ערכים גדולים גולש. טריק סטנדרטי:
+
 $$
 \frac{\exp(s_c)}{\sum_k \exp(s_k)} = \frac{\exp(s_c - m)}{\sum_k \exp(s_k - m)}, \qquad m = \max_k s_k.
 $$
+
 זו בדיוק השורה `scores -= np.max(scores, axis=1, keepdims=True)` בקוד.
 
 **Cross-Entropy loss (NLL).** עבור labels $y_i$, ההפסד הממוצע הוא:
+
 $$
 L_{\text{CE}}(W) = -\frac{1}{N} \sum_{i=1}^{N} \log p(y=y_i \mid \mathbf{x}_i; W).
 $$
 
 **Gradient.** תוצאה יפהפיה שמוכחת בהרצאה היא שהגרדיאנט ביחס לציונים $\mathbf{s}_i$ הוא:
+
 $$
 \frac{\partial L_i}{\partial \mathbf{s}_i} = \mathbf{p}_i - \mathbf{e}_{y_i},
 $$
+
 כאשר $\mathbf{e}_{y_i}$ הוא וקטור one-hot של התווית האמיתית. בעזרת כלל השרשרת ($\mathbf{s}_i = \mathbf{x}_i^\top W$):
+
 $$
-\boxed{\;\nabla_W L_{\text{CE}} = \frac{1}{N} X^\top (P - Y_{\text{onehot}})\;}
+\nabla_W L_{\text{CE}} \\;=\\; \frac{1}{N} X^\top (P - Y_{\text{onehot}})
 $$
+
 שבקוד זה בדיוק:
 ```python
 dscores = probs.copy()
@@ -123,9 +142,11 @@ dW = X.T @ dscores / N
 ### Stochastic Gradient Descent
 
 במקום לחשב גרדיאנט על כל $N$ הדגימות, בכל איטרציה דוגמים mini-batch $\mathcal{B}\subseteq\mathcal{D}$, $|\mathcal{B}|=b$, ומעדכנים:
+
 $$
 W \leftarrow W - \eta \cdot \nabla_W L_{\mathcal{B}}(W).
 $$
+
 יתרונות: סיבוכיות חישובית נמוכה בכל צעד, רעש שמאפשר יציאה ממינימום לוקלי. חסרונות: הגרדיאנט רועש, ולכן דרוש `learning_rate` קטן מספיק. בקוד מדגמים **with replacement** דרך `np.random.choice` – שיטה מהירה ומקובלת ל־SGD.
 
 ---
@@ -291,9 +312,11 @@ $$
 **מה**: מחשב הסתברויות softmax ובוחר את המחלקה בעלת ההסתברות הגבוהה.
 
 **נקודה מתמטית יפה**: מכיוון ש־$\operatorname{softmax}$ היא פונקציה מונוטונית (עולה ביחס לציון של אותה מחלקה), מתקיים:
+
 $$
-\arg\max_c \; p_c(\mathbf{x}) = \arg\max_c \; s_c(\mathbf{x}).
+\arg\max_c \\; p_c(\mathbf{x}) = \arg\max_c \\; s_c(\mathbf{x}).
 $$
+
 לכן הקריאה ל־`softmax` **לא משנה את התחזית** – היא נשארת כאן ליישור קו עם הפרק במחברת ("Softmax section") ולצורכי ניפוי שגיאות (אפשר להציג probabilities).
 
 #### `loss(self, X_batch, y_batch)`
@@ -335,9 +358,11 @@ def perceptron_loss_naive(W, X, y):
 - בסוף מחלק ב־$N$: ההפסד הופך ל־**שיעור טעויות** ב־$[0,1]$, והגרדיאנט מנורמל כך ש־`learning_rate` לא תלוי בגודל ה־batch.
 
 **למה**: זה מימוש ישיר של **sub-gradient** של הפסד 0/1 עם ה־update rule הקלאסי של פרספטרון:
+
 $$
 \mathbf{w}_{y_i} \leftarrow \mathbf{w}_{y_i} + \eta \mathbf{x}_i, \qquad \mathbf{w}_{\hat{y}_i} \leftarrow \mathbf{w}_{\hat{y}_i} - \eta \mathbf{x}_i \qquad \text{(רק אם טעות)}.
 $$
+
 שים לב שאחרי הצעד $W \leftarrow W - \eta \nabla_W L$ הסימנים מתהפכים, ובדיוק מתקבלת הנוסחה למעלה.
 
 **קישור לתאוריה**: זוהי הצורה הרב-מחלקתית של Rosenblatt Perceptron Learning Rule, המוצגת בהרצאה. זו הגרסה ה"איטית" (loops ב־Python) שמוגשת למטרת הבנה – ולאימות מול הגרסה הווקטוריאלית במבחני gradient check במחברת.
@@ -466,8 +491,8 @@ def tune_perceptron(ModelClass, X_train, y_train, X_val, y_val,
 ## היפר-פרמטרים וסריקה
 
 הערכים שנסרקים במחברת (ראו תא `tune_perceptron(...)` ו־`tune_perceptron(LogisticRegression, ...)`):
-- `learning_rates` – טיפוסית $\{10^{-7}, 10^{-6}, \ldots, 10^{-3}\}$. ערכים גדולים מדי => loss מתפוצץ; ערכים קטנים מדי => אימון איטי.
-- `batch_sizes` – טיפוסית $\{64, 128, 256\}$ או בסדר גודל דומה.
+- `learning_rates` – טיפוסית $\\{10^{-7}, 10^{-6}, \ldots, 10^{-3}\\}$. ערכים גדולים מדי => loss מתפוצץ; ערכים קטנים מדי => אימון איטי.
+- `batch_sizes` – טיפוסית $\\{64, 128, 256\\}$ או בסדר גודל דומה.
 - `num_iters` – מספר צעדי SGD; מספיק גדול כדי שה־loss יתיישר.
 
 בסוף, התוצאה של הסריקה היא:
