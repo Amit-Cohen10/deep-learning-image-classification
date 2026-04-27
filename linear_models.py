@@ -270,13 +270,8 @@ class LinearPerceptron(LinearClassifier):
         #                          START OF YOUR CODE                             #
         ###########################################################################
 
-        # safety: if X has more columns than W expects (e.g. duplicated bias),
-        # keep only the first D features so the matmul lines up cleanly.
-        D_w = self.W.shape[0]
-        X_use = X[:, :D_w] if X.shape[1] != D_w else X
-
         # compute raw class scores and pick the class with the highest score per sample.
-        scores = X_use @ self.W         # shape (M, C)
+        scores = X @ self.W             # shape (M, C)
         y_pred = np.argmax(scores, axis=1)
 
         ###########################################################################
@@ -302,8 +297,7 @@ class LinearPerceptron(LinearClassifier):
             A tuple (loss, dW) where ``loss`` is a scalar and ``dW`` has
             the same shape as ``self.W``.
         """
-        # Do Not change this function! the implementation of this function is in the `softmax_cross_entropy` function
-        return softmax_cross_entropy(self.W, X_batch, y_batch)
+        return perceptron_loss_naive(self.W, X_batch, y_batch)
 
 
 class LogisticRegression(LinearClassifier):
@@ -349,14 +343,10 @@ class LogisticRegression(LinearClassifier):
         # TODO: Implement this method.                                                  #
         ###########################################################################
 
-        # align feature count with W in case an extra column was appended.
-        D_w = self.W.shape[0]
-        X_use = X[:, :D_w] if X.shape[1] != D_w else X
-
         # compute class scores, convert to probabilities, pick the argmax class.
         # note: argmax of softmax equals argmax of raw scores (softmax is monotonic),
         # but we call softmax here to match the section title in the notebook.
-        scores = X_use @ self.W          # shape (M, C)
+        scores = X @ self.W              # shape (M, C)
         probs = softmax(scores)          # shape (M, C), each row sums to 1
         y_pred = np.argmax(probs, axis=1)
 
@@ -390,9 +380,8 @@ def perceptron_loss_naive(W: np.ndarray, X: np.ndarray, y: np.ndarray):
     """
     Compute the multiclass perceptron loss using explicit loops.
 
-    This function should compute the average number of classification mistakes
-    over the batch and the gradient of the loss with respect to the weight
-    matrix W.
+    This function computes the average multiclass perceptron margin loss over
+    the batch and the gradient of the loss with respect to the weight matrix W.
 
     Parameters
     ----------
@@ -408,16 +397,11 @@ def perceptron_loss_naive(W: np.ndarray, X: np.ndarray, y: np.ndarray):
     Returns
     -------
     loss : float
-        Average number of classification mistakes
+        Average multiclass perceptron margin loss
     dW : (D, C)
         Gradient of the loss w.r.t. W
     """
-    loss = 0.0
-    # Align dimensions (drop extra bias columns if needed)
-    D_w = W.shape[0]
-    X_use = X[:, :D_w] if X.shape[1] != D_w else X
-
-    N, D = X_use.shape
+    N, D = X.shape
     _, C = W.shape
 
     # Initialize loss & gradient
@@ -430,29 +414,28 @@ def perceptron_loss_naive(W: np.ndarray, X: np.ndarray, y: np.ndarray):
     #   - Average loss and gradient by N                                      #
     #############################################################################
 
-    # classic multiclass perceptron rule with explicit python loops.
-    # loss counts how many samples are misclassified (0/1 mistake count), and
-    # the gradient pushes the correct-class column up and the wrong-class column down
-    # for each misclassified example.
+    # multiclass perceptron margin loss with explicit python loops.
+    # for a misclassified sample, the loss is the margin by which the predicted
+    # class score beats the true-class score; correctly classified samples
+    # contribute zero.
     for i in range(N):
         # compute raw scores for sample i: one score per class.
-        scores_i = X_use[i] @ W           # shape (C,)
+        scores_i = X[i] @ W               # shape (C,)
         # predicted class is the one with the highest score.
         pred = int(np.argmax(scores_i))
         true_label = int(y[i])
         # only misclassified samples contribute to the loss and the gradient.
         if pred != true_label:
-            # count this sample as one mistake.
-            loss += 1.0
+            loss += scores_i[pred] - scores_i[true_label]
             # negative gradient for the correct class: W -= lr*dW will add x_i there,
             # which raises the correct class score next time.
-            dW[:, true_label] -= X_use[i]
+            dW[:, true_label] -= X[i]
             # positive gradient for the wrong class: W -= lr*dW will subtract x_i there,
             # which lowers the wrong class score next time.
-            dW[:, pred] += X_use[i]
+            dW[:, pred] += X[i]
 
-    # average over the batch so the loss is a mistake-fraction in [0, 1] and
-    # the gradient scale is independent of batch size.
+    # average over the batch so the loss and gradient scale are independent of
+    # batch size.
     loss /= N
     dW /= N
 
@@ -482,14 +465,7 @@ def softmax_cross_entropy(W: np.ndarray, X: np.ndarray, y: np.ndarray):
     loss : float
     dW   : (D, C) gradient of loss wrt W
     """
-    # --- Align dimensions if X has extra columns (e.g., duplicate bias) ---
-    D_w = W.shape[0]
-    if X.shape[1] != D_w:
-        X_use = X[:, :D_w]  # drop extra tail columns safely
-    else:
-        X_use = X
-
-    N = X_use.shape[0]
+    N = X.shape[0]
     loss, dW = 0.0, np.zeros_like(W)
 
     #############################################################################
@@ -505,7 +481,7 @@ def softmax_cross_entropy(W: np.ndarray, X: np.ndarray, y: np.ndarray):
     probs_all = np.zeros((N, C))
     for i in range(N):
         # raw scores for sample i, one per class.
-        scores_i = X_use[i] @ W                      # shape (C,)
+        scores_i = X[i] @ W                          # shape (C,)
         # subtract the max score for numerical stability (log-sum-exp trick).
         scores_i -= np.max(scores_i)
         # exponentiate and normalize to get a proper probability distribution.
@@ -546,7 +522,7 @@ def softmax_cross_entropy(W: np.ndarray, X: np.ndarray, y: np.ndarray):
     dscores = probs_all.copy()
     dscores[np.arange(N), y] -= 1.0
     # chain rule: dL/dW = X^T @ dL/dscores, then average over the batch.
-    dW = X_use.T @ dscores / N
+    dW = X.T @ dscores / N
 
     #############################################################################
     #                            END OF YOUR CODE                               #
@@ -610,20 +586,13 @@ def softmax_cross_entropy_vectorized(W: np.ndarray, X: np.ndarray, y: np.ndarray
     loss : float
     dW   : (D, C) gradient of loss wrt W
     """
-    # --- Align dimensions if X has extra columns (e.g., duplicate bias) ---
-    D_w = W.shape[0]
-    if X.shape[1] != D_w:
-        X_use = X[:, :D_w]  # drop extra tail columns safely
-    else:
-        X_use = X
-
-    N = X_use.shape[0]
+    N = X.shape[0]
     loss = 0.0
     dW = np.zeros_like(W)
 
     #############################################################################
     # TODO: Implement the forward pass in a fully vectorized way.               #
-    # 1. Compute the scores (N, C) for all samples in X_use.                    #
+    # 1. Compute the scores (N, C) for all samples in X.                        #
     # 2. Stabilize the scores by subtracting the max score in each row.         #
     # 3. Compute the softmax probabilities (N, C) for all samples.              #
     #############################################################################
@@ -631,7 +600,7 @@ def softmax_cross_entropy_vectorized(W: np.ndarray, X: np.ndarray, y: np.ndarray
     #############################################################################
 
     # one big matmul replaces the per-sample loop from the non-vectorized version.
-    scores = X_use @ W                                      # shape (N, C)
+    scores = X @ W                                          # shape (N, C)
     # subtract the per-row max for numerical stability (log-sum-exp trick).
     scores -= np.max(scores, axis=1, keepdims=True)
     # softmax: exponentiate and normalize per row.
@@ -676,7 +645,7 @@ def softmax_cross_entropy_vectorized(W: np.ndarray, X: np.ndarray, y: np.ndarray
     dscores = probs.copy()
     dscores[np.arange(N), y] -= 1.0
     # chain rule with a single matmul: dL/dW = X^T @ dL/dscores, then average.
-    dW = X_use.T @ dscores / N
+    dW = X.T @ dscores / N
 
     #############################################################################
     # END OF YOUR CODE                                                          #
@@ -795,4 +764,3 @@ def tune_perceptron(
     ############################################################################
 
     return results, best_model, best_val
-

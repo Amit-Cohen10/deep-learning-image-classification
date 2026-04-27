@@ -77,13 +77,21 @@ $$
 
 ### פרספטרון רב-מחלקתי
 
-**Loss (0/1 mistakes).** במימוש שלנו, ההפסד שמחזיר `perceptron_loss_naive` הוא שיעור הטעויות בבאץ':
+**Loss (margin-based multiclass perceptron).** במימוש שלנו, ההפסד שמחזיר `perceptron_loss_naive` הוא הפסד מרג'יני. עבור דגימה $i$:
 
 $$
-L_{\text{perc}}(W) = \frac{1}{N} \sum_{i=1}^{N} \mathbb{1}\\!\left[\hat{y}_i \neq y_i\right],
+\hat{y}_i = \arg\max_c \mathbf{x}_i^\top \mathbf{w}_c,
+\qquad
+L_i = \max\left(0, s_{\hat{y}_i}(\mathbf{x}_i) - s_{y_i}(\mathbf{x}_i)\right).
 $$
 
-כאשר $\hat{y}_i = \arg\max_c \mathbf{x}_i^\top \mathbf{w}_c$.
+במימוש לפי הבהרת המרצה, אם הדגימה מסווגת נכון אז $\hat{y}_i=y_i$ ולכן $L_i=0$. אם היא מסווגת לא נכון, ההפסד הוא הפער שבו המחלקה שנבחרה ניצחה את המחלקה הנכונה. אין כאן margin קבוע של $+1$.
+
+ההפסד הממוצע בבאץ':
+
+$$
+L_{\text{perc}}(W) = \frac{1}{N}\sum_{i=1}^{N} L_i.
+$$
 
 **Update rule.** הגרדיאנט שנבנה בקוד ממש את כלל העדכון הקלאסי של פרספטרון רב-מחלקתי: עבור דגימה שסווגה שגוי ($\hat{y}_i \neq y_i$) נגדיר
 
@@ -259,16 +267,12 @@ $$
 
 ```252:285:linear_models.py
     def predict(self, X):
-        D_w = self.W.shape[0]
-        X_use = X[:, :D_w] if X.shape[1] != D_w else X
-        scores = X_use @ self.W
+        scores = X @ self.W
         y_pred = np.argmax(scores, axis=1)
         return y_pred
 ```
 
 **מה**: מבצע $\hat{y} = \arg\max_c \mathbf{x}^\top \mathbf{w}_c$.
-
-**פרט עדין**: בדיקת גודל עמודות `X`. אם משום מה הגיעה מטריצה עם עמודות נוספות (למשל bias שנוסף פעמיים), נחתוך את הזנב – זו רשת ביטחון מפני באגים ב־preprocessing.
 
 **קישור לתאוריה**: זו בדיוק נוסחת החיזוי של classifier לינארי – המחלקה עם הציון הגבוה ביותר.
 
@@ -276,10 +280,10 @@ $$
 
 ```287:306:linear_models.py
     def loss(self, X_batch, y_batch):
-        return softmax_cross_entropy(self.W, X_batch, y_batch)
+        return perceptron_loss_naive(self.W, X_batch, y_batch)
 ```
 
-**הערה חשובה**: למרות השם `LinearPerceptron`, המתודה `loss` כאן קוראת ל־`softmax_cross_entropy`, לא ל־`perceptron_loss_naive`. זה מבני: המחלקה מקבלת את אותה דריסה שסיפק שלד התרגיל. אימון הפרספטרון הקלאסי עצמו מבוצע ע"י קריאה ישירה ל־`perceptron_loss_naive` בקוד המחברת (לבדיקות numerical gradient, ולצורך השוואה בין שתי הפונקציות).
+**מה**: מחזיר את הפסד הפרספטרון הרב-מחלקתי ואת הגרדיאנט שלו. לפי הבהרת פיאצה, זו הקריאה הנכונה במחלקה `LinearPerceptron`.
 
 ---
 
@@ -301,9 +305,7 @@ $$
 
 ```333:366:linear_models.py
     def predict(self, X):
-        D_w = self.W.shape[0]
-        X_use = X[:, :D_w] if X.shape[1] != D_w else X
-        scores = X_use @ self.W
+        scores = X @ self.W
         probs = softmax(scores)
         y_pred = np.argmax(probs, axis=1)
         return y_pred
@@ -336,13 +338,13 @@ $$
 def perceptron_loss_naive(W, X, y):
     ...
     for i in range(N):
-        scores_i = X_use[i] @ W
+        scores_i = X[i] @ W
         pred = int(np.argmax(scores_i))
         true_label = int(y[i])
         if pred != true_label:
-            loss += 1.0
-            dW[:, true_label] -= X_use[i]
-            dW[:, pred]       += X_use[i]
+            loss += scores_i[pred] - scores_i[true_label]
+            dW[:, true_label] -= X[i]
+            dW[:, pred]       += X[i]
     loss /= N
     dW /= N
     return loss, dW
@@ -353,11 +355,11 @@ def perceptron_loss_naive(W, X, y):
 **איך בדיוק**:
 - עבור כל דגימה מחשב $\mathbf{s}_i = \mathbf{x}_i^\top W$ ו־$\hat{y}_i = \arg\max_c s_{i,c}$.
 - אם סווג שגוי (ורק אז):
-  - **Loss**: מוסיף 1 (ספירת טעויות).
+  - **Loss**: מוסיף את המרג'ין $s_{\hat{y}_i} - s_{y_i}$.
   - **Gradient**: $\mathbf{dW}[:, y_i] \mathrel{-}= \mathbf{x}_i$ ו־$\mathbf{dW}[:, \hat{y}_i] \mathrel{+}= \mathbf{x}_i$.
-- בסוף מחלק ב־$N$: ההפסד הופך ל־**שיעור טעויות** ב־$[0,1]$, והגרדיאנט מנורמל כך ש־`learning_rate` לא תלוי בגודל ה־batch.
+- בסוף מחלק ב־$N$: ההפסד הוא **margin loss ממוצע**, והגרדיאנט מנורמל כך ש־`learning_rate` לא תלוי בגודל ה־batch.
 
-**למה**: זה מימוש ישיר של **sub-gradient** של הפסד 0/1 עם ה־update rule הקלאסי של פרספטרון:
+**למה**: זה מימוש ישיר של **sub-gradient** של הפסד הפרספטרון המרג'יני עם ה־update rule הקלאסי של פרספטרון:
 
 $$
 \mathbf{w}_{y_i} \leftarrow \mathbf{w}_{y_i} + \eta \mathbf{x}_i, \qquad \mathbf{w}_{\hat{y}_i} \leftarrow \mathbf{w}_{\hat{y}_i} - \eta \mathbf{x}_i \qquad \text{(רק אם טעות)}.
@@ -376,7 +378,7 @@ def softmax_cross_entropy(W, X, y):
     ...
     probs_all = np.zeros((N, C))
     for i in range(N):
-        scores_i = X_use[i] @ W
+        scores_i = X[i] @ W
         scores_i -= np.max(scores_i)          # stability
         exp_scores = np.exp(scores_i)
         probs_all[i] = exp_scores / np.sum(exp_scores)
@@ -386,7 +388,7 @@ def softmax_cross_entropy(W, X, y):
 
     dscores = probs_all.copy()
     dscores[np.arange(N), y] -= 1.0
-    dW = X_use.T @ dscores / N
+    dW = X.T @ dscores / N
     return loss, dW
 ```
 
@@ -428,7 +430,7 @@ def softmax(x):
 ```592:685:linear_models.py
 def softmax_cross_entropy_vectorized(W, X, y):
     ...
-    scores = X_use @ W                                  # (N, C)
+    scores = X @ W                                      # (N, C)
     scores -= np.max(scores, axis=1, keepdims=True)     # stability
     exp_scores = np.exp(scores)
     probs = exp_scores / np.sum(exp_scores, axis=1, keepdims=True)
@@ -438,7 +440,7 @@ def softmax_cross_entropy_vectorized(W, X, y):
 
     dscores = probs.copy()
     dscores[np.arange(N), y] -= 1.0
-    dW = X_use.T @ dscores / N
+    dW = X.T @ dscores / N
     return loss, dW
 ```
 
